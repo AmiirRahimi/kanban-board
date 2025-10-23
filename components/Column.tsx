@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { useRef, useEffect } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Card as CardType, CardStatus, useBoardStore } from '@/lib/store';
@@ -15,95 +15,30 @@ interface ColumnProps {
   color: string;
 }
 
-const WINDOW_SIZE = 50; // Show 50 cards at a time in the viewport
-const BUFFER = 10; // Keep 10 extra cards above/below for smooth scrolling
-
 export default function Column({ title, status, cards, totalCards, visibleCount, color }: ColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
   });
   
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  
-  // Initialize window state - resets when totalCards changes (e.g., during search)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const initialWindow = useMemo(() => ({ start: 0, end: WINDOW_SIZE }), [totalCards]);
-  const [windowStart, setWindowStart] = useState(initialWindow.start);
-  const [windowEnd, setWindowEnd] = useState(initialWindow.end);
-
-  // Reset window when initialWindow changes
-  useEffect(() => {
-    setWindowStart(initialWindow.start);
-    setWindowEnd(initialWindow.end);
-  }, [initialWindow]);
-
-  // Track drag state to prevent scroll jumping
-  useEffect(() => {
-    const handleDragStart = () => {
-      setIsDragging(true);
-    };
-    const handleDragEnd = () => {
-      // Small delay to let drop complete before re-enabling virtual scroll
-      setTimeout(() => {
-        setIsDragging(false);
-      }, 100);
-    };
-
-    window.addEventListener('dragstart', handleDragStart);
-    window.addEventListener('dragend', handleDragEnd);
-    
-    return () => {
-      window.removeEventListener('dragstart', handleDragStart);
-      window.removeEventListener('dragend', handleDragEnd);
-    };
-  }, []);
-
-  // Bidirectional windowing: adjust visible window based on scroll position
-  const handleScroll = useCallback(() => {
-    const container = scrollRef.current;
-    if (!container) return;
-
-    // Don't adjust window during drag operations to prevent scroll jumping
-    if (isDragging) return;
-
-    const scrollTop = container.scrollTop;
-    const scrollHeight = container.scrollHeight;
-    const clientHeight = container.clientHeight;
-
-    // Estimate card height (average ~120px)
-    const estimatedCardHeight = 120;
-    const scrolledCards = Math.floor(scrollTop / estimatedCardHeight);
-    
-    // Calculate new window with buffer
-    const newStart = Math.max(0, scrolledCards - BUFFER);
-    const newEnd = Math.min(cards.length, scrolledCards + WINDOW_SIZE + BUFFER);
-
-    setWindowStart(newStart);
-    setWindowEnd(newEnd);
-
-    // Load more when near bottom
-    if (scrollHeight - scrollTop - clientHeight < 300 && visibleCount < totalCards) {
-      useBoardStore.getState().loadMoreCards(status);
-    }
-  }, [cards.length, status, totalCards, visibleCount, isDragging]);
 
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
+
+    const handleScroll = () => {
+      const scrollTop = container.scrollTop;
+      const scrollHeight = container.scrollHeight;
+      const clientHeight = container.clientHeight;
+
+      if (scrollHeight - scrollTop - clientHeight < 300 && visibleCount < totalCards) {
+        useBoardStore.getState().loadMoreCards(status);
+      }
+    };
 
     container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [handleScroll]);
-
-  // During drag: show all loaded cards to prevent items disappearing
-  // During normal scroll: use virtual window for performance
-  const effectiveStart = isDragging || isOver ? 0 : windowStart;
-  const effectiveEnd = isDragging || isOver ? cards.length : windowEnd;
-  
-  const visibleCards = cards.slice(effectiveStart, effectiveEnd);
-  const topPadding = effectiveStart * 120; // Approximate height for scrolled cards
-  const bottomPadding = Math.max(0, (cards.length - effectiveEnd) * 120);
+  }, [status, totalCards, visibleCount]);
 
   return (
     <div className="flex-1 bg-gray-50 rounded-xl p-4 flex flex-col min-w-0 border border-gray-200 shadow-sm">
@@ -126,20 +61,12 @@ export default function Column({ title, status, cards, totalCards, visibleCount,
           isOver ? 'bg-blue-50 ring-2 ring-blue-300' : ''
         }`}
       >
-        <div ref={setNodeRef} className="min-h-[100px]">
-          {/* Padding for scrolled-past items (removed from DOM) */}
-          {topPadding > 0 && <div style={{ height: `${topPadding}px` }} />}
-          
-          <div className="space-y-3 pb-2">
-            <SortableContext id={status} items={visibleCards.map(c => c.id)} strategy={verticalListSortingStrategy}>
-              {visibleCards.map((card) => (
-                <Card key={card.id} card={card} />
-              ))}
-            </SortableContext>
-          </div>
-
-          {/* Padding for items below viewport (not yet rendered) */}
-          {bottomPadding > 0 && <div style={{ height: `${bottomPadding}px` }} />}
+        <div ref={setNodeRef} className="space-y-3 pb-2 min-h-[100px]">
+          <SortableContext id={status} items={cards.map(c => c.id)} strategy={verticalListSortingStrategy}>
+            {cards.map((card) => (
+              <Card key={card.id} card={card} />
+            ))}
+          </SortableContext>
           
           {visibleCount < totalCards && (
             <div className="w-full py-3 flex items-center justify-center text-xs text-gray-500">
