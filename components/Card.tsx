@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState, useEffect } from 'react';
+import { memo, useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Card as CardType, LABEL_OPTIONS, Label } from '@/lib/store';
@@ -8,10 +8,9 @@ import { useBoardStore } from '@/lib/store';
 
 interface CardProps {
   card: CardType;
-  onResize?: () => void;
 }
 
-const Card = memo(({ card, onResize }: CardProps) => {
+const Card = memo(({ card }: CardProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description);
@@ -35,24 +34,19 @@ const Card = memo(({ card, onResize }: CardProps) => {
     transition: transition || 'transform 200ms ease',
     opacity: isDragging ? 0 : 1,
     pointerEvents: isDragging ? ('none' as const) : ('auto' as const),
+    backfaceVisibility: 'hidden' as const,
+    WebkitFontSmoothing: 'antialiased' as const,
   };
-
-  useEffect(() => {
-    onResize?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditing]);
 
   const handleSave = () => {
     updateCard(card.id, { title, description, labels });
     setIsEditing(false);
-    onResize?.();
   };
 
   const handleCancel = () => {
     setTitle(card.title);
     setDescription(card.description);
     setIsEditing(false);
-    onResize?.();
   };
 
   if (isEditing) {
@@ -121,7 +115,7 @@ const Card = memo(({ card, onResize }: CardProps) => {
     <div
       ref={setNodeRef}
       style={style}
-      className="group bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-lg hover:border-gray-300 transition-all duration-200"
+      className="group bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-lg hover:border-gray-300 transition-all duration-200 will-change-transform"
     >
       <div className="flex flex-wrap gap-2 mb-2">
         {(card.labels ?? []).map((lbl) => {

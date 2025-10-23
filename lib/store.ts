@@ -34,10 +34,13 @@ export interface Card {
 
 interface BoardStore {
   cards: Card[];
+  allCards: Card[]; // Store all cards
+  visibleCount: { [key in CardStatus]: number }; // How many cards to show per column
   searchQuery: string;
   isSearching: boolean;
   setSearchQuery: (query: string) => void;
   setIsSearching: (isSearching: boolean) => void;
+  loadMoreCards: (status: CardStatus) => void;
   addCard: (card: Omit<Card, 'id'>) => void;
   updateCard: (id: string, updates: Partial<Card>) => void;
   deleteCard: (id: string) => void;
@@ -83,13 +86,32 @@ const generateFakeCards = (count: number): Card[] => {
   return cards;
 };
 
-export const useBoardStore = create<BoardStore>((set) => ({
+// Chunked loading strategy: Start with fewer cards, load more on demand
+// This prevents lag with thousands of cards by only rendering what's needed
+const INITIAL_LOAD = 50;
+const LOAD_MORE_CHUNK = 30;
+
+export const useBoardStore = create<BoardStore>((set, get) => ({
+  allCards: generateFakeCards(5000),
   cards: generateFakeCards(5000),
+  // Track how many cards should be visible per column (rest hidden until "Load More")
+  visibleCount: {
+    todo: INITIAL_LOAD,
+    inprogress: INITIAL_LOAD,
+    done: INITIAL_LOAD,
+  },
   searchQuery: '',
   isSearching: false,
   
   setSearchQuery: (query) => set({ searchQuery: query }),
   setIsSearching: (isSearching) => set({ isSearching }),
+  
+  loadMoreCards: (status: CardStatus) => set((state) => ({
+    visibleCount: {
+      ...state.visibleCount,
+      [status]: state.visibleCount[status] + LOAD_MORE_CHUNK,
+    },
+  })),
   
   addCard: (card) => set((state) => ({
     cards: [{ ...card, labels: card.labels ?? [], id: `card-${Date.now()}` }, ...state.cards],
@@ -112,16 +134,14 @@ export const useBoardStore = create<BoardStore>((set) => ({
     const card = state.cards[cardIndex];
     if (card.status === status) return state;
     
-    // Remove card from current position
     const newCards = state.cards.filter((c) => c.id !== id);
     
     if (overId) {
-      // Insert at the specific position (before the card with overId)
+      // Dropped on specific card: insert before that card
       const targetIndex = newCards.findIndex((c) => c.id === overId);
       if (targetIndex !== -1) {
         newCards.splice(targetIndex, 0, { ...card, status });
       } else {
-        // If overId not found, add to beginning of target column
         const firstCardIndex = newCards.findIndex((c) => c.status === status);
         if (firstCardIndex === -1) {
           newCards.push({ ...card, status });
@@ -130,13 +150,11 @@ export const useBoardStore = create<BoardStore>((set) => ({
         }
       }
     } else {
-      // No specific position, add to beginning of target column
+      // Dropped on column: add to beginning of that column
       const firstCardIndex = newCards.findIndex((c) => c.status === status);
       if (firstCardIndex === -1) {
-        // No cards in target column, add to end
         newCards.push({ ...card, status });
       } else {
-        // Insert before the first card of target column
         newCards.splice(firstCardIndex, 0, { ...card, status });
       }
     }

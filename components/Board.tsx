@@ -17,6 +17,7 @@ import CardModal from './CardModal';
 
 export default function Board() {
   const cards = useBoardStore((state) => state.cards);
+  const visibleCount = useBoardStore((state) => state.visibleCount);
   const searchQuery = useBoardStore((state) => state.searchQuery);
   const setSearchQuery = useBoardStore((state) => state.setSearchQuery);
   const isSearching = useBoardStore((state) => state.isSearching);
@@ -79,12 +80,24 @@ export default function Board() {
   }, [cards, deferredSearchQuery]);
 
   const columnCards = useMemo(() => {
-    const todo = filteredCards.filter((c) => c.status === 'todo');
-    const inprogress = filteredCards.filter((c) => c.status === 'inprogress');
-    const done = filteredCards.filter((c) => c.status === 'done');
+    const allTodo = filteredCards.filter((c) => c.status === 'todo');
+    const allInProgress = filteredCards.filter((c) => c.status === 'inprogress');
+    const allDone = filteredCards.filter((c) => c.status === 'done');
     
-    return { todo, inprogress, done };
-  }, [filteredCards]);
+    // When searching: show all results. When not: limit by visibleCount for performance
+    const todo = deferredSearchQuery ? allTodo : allTodo.slice(0, visibleCount.todo);
+    const inprogress = deferredSearchQuery ? allInProgress : allInProgress.slice(0, visibleCount.inprogress);
+    const done = deferredSearchQuery ? allDone : allDone.slice(0, visibleCount.done);
+    
+    return { 
+      todo, 
+      inprogress, 
+      done,
+      totalTodo: allTodo.length,
+      totalInProgress: allInProgress.length,
+      totalDone: allDone.length,
+    };
+  }, [filteredCards, visibleCount, deferredSearchQuery]);
 
   const handleDragStart = (event: any) => {
     setActiveId(event.active.id);
@@ -103,14 +116,12 @@ export default function Board() {
     const activeCard = cards.find(c => c.id === activeId);
     if (!activeCard) return;
 
-    // Determine if we're dropping on a column or another card
     let targetStatus: CardStatus | null = null;
     
-    // Check if dropping directly on a column
     if (overId === 'todo' || overId === 'inprogress' || overId === 'done') {
       targetStatus = overId;
     } else {
-      // Dropping on another card - get the container ID
+      // Extract container ID from sortable context when dropping on a card
       const containerId = (over as any).data?.current?.sortable?.containerId as CardStatus | undefined;
       if (containerId === 'todo' || containerId === 'inprogress' || containerId === 'done') {
         targetStatus = containerId;
@@ -119,15 +130,13 @@ export default function Board() {
 
     if (!targetStatus) return;
 
-    // Check if we're moving within the same column or to a different column
     if (activeCard.status === targetStatus) {
-      // Reorder within the same column
+      // Same column: just reorder
       if (activeId !== overId) {
         useBoardStore.getState().reorderCards(activeId, overId);
       }
     } else {
-      // Move to a different column
-      // Pass overId if dropping on a card (not directly on column)
+      // Different column: move and optionally position near dropped card
       const isDroppingOnCard = overId !== 'todo' && overId !== 'inprogress' && overId !== 'done';
       moveCard(activeId, targetStatus, isDroppingOnCard ? overId : undefined);
     }
@@ -184,18 +193,24 @@ export default function Board() {
             title="To Do" 
             status="todo" 
             cards={columnCards.todo}
+            totalCards={columnCards.totalTodo}
+            visibleCount={visibleCount.todo}
             color="bg-slate-500"
           />
           <Column 
             title="In Progress" 
             status="inprogress" 
             cards={columnCards.inprogress}
+            totalCards={columnCards.totalInProgress}
+            visibleCount={visibleCount.inprogress}
             color="bg-amber-500"
           />
           <Column 
             title="Done" 
             status="done" 
             cards={columnCards.done}
+            totalCards={columnCards.totalDone}
+            visibleCount={visibleCount.done}
             color="bg-emerald-500"
           />
         </div>
