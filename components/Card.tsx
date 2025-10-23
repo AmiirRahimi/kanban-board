@@ -34,8 +34,6 @@ const Card = memo(({ card }: CardProps) => {
     transition: transition || 'transform 200ms ease',
     opacity: isDragging ? 0 : 1,
     pointerEvents: isDragging ? ('none' as const) : ('auto' as const),
-    backfaceVisibility: 'hidden' as const,
-    WebkitFontSmoothing: 'antialiased' as const,
   };
 
   const handleSave = () => {
@@ -115,7 +113,7 @@ const Card = memo(({ card }: CardProps) => {
     <div
       ref={setNodeRef}
       style={style}
-      className="group bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-lg hover:border-gray-300 transition-all duration-200 will-change-transform"
+      className="group bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-lg hover:border-gray-300"
     >
       <div className="flex flex-wrap gap-2 mb-2">
         {(card.labels ?? []).map((lbl) => {

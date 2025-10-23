@@ -41,6 +41,5 @@ body {
 [style*="overflow: auto"],
 [class*="overflow-auto"] {
   -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
 }
 
