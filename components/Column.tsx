@@ -60,9 +60,8 @@ export default function Column({ title, status, cards, totalCards, visibleCount,
         className={`flex-1 overflow-auto rounded-lg ${
           isOver ? 'bg-blue-50 ring-2 ring-blue-300' : ''
         }`}
-        style={{ willChange: 'scroll-position' }}
       >
-        <div ref={setNodeRef} className="space-y-3 pb-2 min-h-[100px]" style={{ contain: 'layout style paint' }}>
+        <div ref={setNodeRef} className="space-y-3 pb-2 min-h-[100px]">
           <SortableContext id={status} items={cards.map(c => c.id)} strategy={verticalListSortingStrategy}>
             {cards.map((card) => (
               <Card key={card.id} card={card} />

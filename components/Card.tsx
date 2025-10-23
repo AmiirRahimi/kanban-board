@@ -25,13 +25,12 @@ const Card = memo(({ card }: CardProps) => {
     listeners,
     setNodeRef,
     transform,
-    transition,
     isDragging,
   } = useSortable({ id: card.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition: transition || 'transform 200ms ease',
+    transition: undefined,
     opacity: isDragging ? 0 : 1,
     pointerEvents: isDragging ? ('none' as const) : ('auto' as const),
   };
