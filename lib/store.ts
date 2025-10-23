@@ -55,35 +55,47 @@ const generateFakeCards = (count: number): Card[] => {
   const statuses: CardStatus[] = ['todo', 'inprogress', 'done'];
   const cards: Card[] = [];
   
-  for (let i = 0; i < count; i++) {
-    const labels: Label[] = [];
-    if (i % 7 === 0) labels.push(LABEL_OPTIONS[i % LABEL_OPTIONS.length]);
-    if (i % 13 === 0) labels.push(LABEL_OPTIONS[(i + 2) % LABEL_OPTIONS.length]);
+  // Distribute cards evenly across columns
+  const cardsPerColumn = Math.ceil(count / 3);
+  
+  for (let statusIndex = 0; statusIndex < 3; statusIndex++) {
+    const status = statuses[statusIndex];
+    const startNum = statusIndex * cardsPerColumn;
+    const endNum = Math.min(startNum + cardsPerColumn, count);
+    
+    for (let i = startNum; i < endNum; i++) {
+      const cardNumber = i - startNum + 1; // Sequential number within column
+      
+      const labels: Label[] = [];
+      if (cardNumber % 7 === 0) labels.push(LABEL_OPTIONS[cardNumber % LABEL_OPTIONS.length]);
+      if (cardNumber % 13 === 0) labels.push(LABEL_OPTIONS[(cardNumber + 2) % LABEL_OPTIONS.length]);
 
-    const checklistTotal = i % 5 === 0 ? 3 : i % 7 === 0 ? 5 : 0;
-    const checklistDone = checklistTotal ? Math.min(checklistTotal, i % (checklistTotal + 1)) : 0;
-    const comments = i % 9 === 0 ? (i % 4) + 1 : 0;
-    const attachments = i % 11 === 0 ? (i % 3) + 1 : 0;
-    const dueDate = i % 6 === 0 ? new Date(Date.now() + (i % 10) * 86400000).toISOString() : undefined;
-    const members = (i % 8 === 0)
-      ? [
-          { id: `m-a-${i}`, initials: 'AR', color: '#f97316' },
-          { id: `m-b-${i}`, initials: 'MS', color: '#22c55e' },
-        ]
-      : [];
-    cards.push({
-      id: `card-${i}`,
-      title: `Task ${i + 1}`,
-      description: `This is the description for task ${i + 1}`,
-      status: statuses[i % 3],
-      labels,
-      checklistDone,
-      checklistTotal,
-      comments,
-      attachments,
-      dueDate,
-      members,
-    });
+      const checklistTotal = cardNumber % 5 === 0 ? 3 : cardNumber % 7 === 0 ? 5 : 0;
+      const checklistDone = checklistTotal ? Math.min(checklistTotal, cardNumber % (checklistTotal + 1)) : 0;
+      const comments = cardNumber % 9 === 0 ? (cardNumber % 4) + 1 : 0;
+      const attachments = cardNumber % 11 === 0 ? (cardNumber % 3) + 1 : 0;
+      const dueDate = cardNumber % 6 === 0 ? new Date(Date.now() + (cardNumber % 10) * 86400000).toISOString() : undefined;
+      const members = (cardNumber % 8 === 0)
+        ? [
+            { id: `m-a-${i}`, initials: 'AR', color: '#f97316' },
+            { id: `m-b-${i}`, initials: 'MS', color: '#22c55e' },
+          ]
+        : [];
+      
+      cards.push({
+        id: `card-${i}`,
+        title: `Task ${cardNumber}`,
+        description: `This is the description for task ${cardNumber}`,
+        status,
+        labels,
+        checklistDone,
+        checklistTotal,
+        comments,
+        attachments,
+        dueDate,
+        members,
+      });
+    }
   }
   
   return cards;
