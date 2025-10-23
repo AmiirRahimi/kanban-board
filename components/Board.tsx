@@ -4,6 +4,7 @@ import { useMemo, useDeferredValue, useEffect, useState } from 'react';
 import {
   DndContext,
   DragEndEvent,
+  DragStartEvent,
   DragOverlay,
   PointerSensor,
   useSensor,
@@ -50,7 +51,7 @@ export default function Board() {
   }, [inputValue, deferredSearchQuery, setIsSearching]);
 
   useEffect(() => {
-    const handler = (e: any) => {
+    const handler = (e: CustomEvent<{ id: string }>) => {
       setModalMode('edit');
       setEditingCard(e.detail.id);
       setModalOpen(true);
@@ -60,7 +61,7 @@ export default function Board() {
   }, []);
 
   useEffect(() => {
-    const handler = (e: any) => {
+    const handler = () => {
       setModalMode('add');
       setEditingCard(null);
       setModalOpen(true);
@@ -100,8 +101,8 @@ export default function Board() {
     };
   }, [filteredCards, visibleCount, deferredSearchQuery]);
 
-  const handleDragStart = (event: any) => {
-    setActiveId(event.active.id);
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -123,7 +124,7 @@ export default function Board() {
       targetStatus = overId;
     } else {
       // Extract container ID from sortable context when dropping on a card
-      const containerId = (over as any).data?.current?.sortable?.containerId as CardStatus | undefined;
+      const containerId = (over.data?.current as { sortable?: { containerId: CardStatus } })?.sortable?.containerId;
       if (containerId === 'todo' || containerId === 'inprogress' || containerId === 'done') {
         targetStatus = containerId;
       }
