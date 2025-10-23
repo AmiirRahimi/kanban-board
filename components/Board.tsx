@@ -226,6 +226,7 @@ export default function Board() {
       </DndContext>
 
       <CardModal
+        key={editingCard || 'new'}
         open={modalOpen}
         mode={modalMode}
         initial={modalMode === 'edit' && editingCardObj ? editingCardObj : { status: 'todo', labels: [] }}

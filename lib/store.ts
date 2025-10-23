@@ -74,7 +74,7 @@ const generateFakeCards = (count: number): Card[] => {
       const checklistDone = checklistTotal ? Math.min(checklistTotal, cardNumber % (checklistTotal + 1)) : 0;
       const comments = cardNumber % 9 === 0 ? (cardNumber % 4) + 1 : 0;
       const attachments = cardNumber % 11 === 0 ? (cardNumber % 3) + 1 : 0;
-      const dueDate = cardNumber % 6 === 0 ? new Date(Date.now() + (cardNumber % 10) * 86400000).toISOString() : undefined;
+      const dueDate = cardNumber % 6 === 0 ? new Date('2024-01-01').toISOString() : undefined;
       const members = (cardNumber % 8 === 0)
         ? [
             { id: `m-a-${i}`, initials: 'AR', color: '#f97316' },
@@ -162,7 +162,7 @@ export const useBoardStore = create<BoardStore>((set) => ({
   },
   
   addCard: (card) => set((state) => ({
-    cards: [{ ...card, labels: card.labels ?? [], id: `card-${Date.now()}` }, ...state.cards],
+    cards: [{ ...card, labels: card.labels ?? [], id: `card-${Math.random().toString(36).substr(2, 9)}` }, ...state.cards],
   })),
   
   updateCard: (id, updates) => set((state) => ({
