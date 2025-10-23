@@ -14,6 +14,7 @@ import { useBoardStore, CardStatus } from '@/lib/store';
 import Column from './Column';
 import Card from './Card';
 import CardModal from './CardModal';
+import Settings from './Settings';
 
 export default function Board() {
   const cards = useBoardStore((state) => state.cards);
@@ -153,7 +154,10 @@ export default function Board() {
   return (
     <div className="h-screen flex flex-col p-8 bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-6 text-gray-900 tracking-tight">📋 Kanban Board</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-4xl font-bold text-gray-900 tracking-tight">📋 Kanban Board</h1>
+          <Settings />
+        </div>
         <div className="relative max-w-2xl">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
             <span className="text-gray-400 text-lg">🔍</span>

@@ -35,12 +35,15 @@ export interface Card {
 interface BoardStore {
   cards: Card[];
   allCards: Card[]; // Store all cards
+  totalCardsCount: number; // Total number of cards to generate
   visibleCount: { [key in CardStatus]: number }; // How many cards to show per column
   searchQuery: string;
   isSearching: boolean;
   setSearchQuery: (query: string) => void;
   setIsSearching: (isSearching: boolean) => void;
   loadMoreCards: (status: CardStatus) => void;
+  setTotalCardsCount: (count: number) => void;
+  resetOrder: () => void;
   addCard: (card: Omit<Card, 'id'>) => void;
   updateCard: (id: string, updates: Partial<Card>) => void;
   deleteCard: (id: string) => void;
@@ -90,10 +93,12 @@ const generateFakeCards = (count: number): Card[] => {
 // This prevents lag with thousands of cards by only rendering what's needed
 const INITIAL_LOAD = 50;
 const LOAD_MORE_CHUNK = 30;
+const DEFAULT_TOTAL_CARDS = 5000;
 
-export const useBoardStore = create<BoardStore>((set, get) => ({
-  allCards: generateFakeCards(5000),
-  cards: generateFakeCards(5000),
+export const useBoardStore = create<BoardStore>((set) => ({
+  allCards: generateFakeCards(DEFAULT_TOTAL_CARDS),
+  cards: generateFakeCards(DEFAULT_TOTAL_CARDS),
+  totalCardsCount: DEFAULT_TOTAL_CARDS,
   // Track how many cards should be visible per column (rest hidden until "Load More")
   visibleCount: {
     todo: INITIAL_LOAD,
@@ -112,6 +117,37 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
       [status]: state.visibleCount[status] + LOAD_MORE_CHUNK,
     },
   })),
+  
+  setTotalCardsCount: (count: number) => {
+    const newCards = generateFakeCards(count);
+    set({
+      cards: newCards,
+      allCards: newCards,
+      totalCardsCount: count,
+      visibleCount: {
+        todo: INITIAL_LOAD,
+        inprogress: INITIAL_LOAD,
+        done: INITIAL_LOAD,
+      },
+    });
+  },
+  
+  resetOrder: () => {
+    // Complete reset: back to 5000 cards, original order, no edits
+    const newCards = generateFakeCards(DEFAULT_TOTAL_CARDS);
+    set({
+      cards: newCards,
+      allCards: newCards,
+      totalCardsCount: DEFAULT_TOTAL_CARDS,
+      visibleCount: {
+        todo: INITIAL_LOAD,
+        inprogress: INITIAL_LOAD,
+        done: INITIAL_LOAD,
+      },
+      searchQuery: '',
+      isSearching: false,
+    });
+  },
   
   addCard: (card) => set((state) => ({
     cards: [{ ...card, labels: card.labels ?? [], id: `card-${Date.now()}` }, ...state.cards],
