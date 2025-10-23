@@ -24,6 +24,7 @@ export default function Column({ title, status, cards, totalCards, visibleCount,
   });
   
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
   
   // Initialize window state - resets when totalCards changes (e.g., during search)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -37,10 +38,34 @@ export default function Column({ title, status, cards, totalCards, visibleCount,
     setWindowEnd(initialWindow.end);
   }, [initialWindow]);
 
+  // Track drag state to prevent scroll jumping
+  useEffect(() => {
+    const handleDragStart = () => {
+      setIsDragging(true);
+    };
+    const handleDragEnd = () => {
+      // Small delay to let drop complete before re-enabling virtual scroll
+      setTimeout(() => {
+        setIsDragging(false);
+      }, 100);
+    };
+
+    window.addEventListener('dragstart', handleDragStart);
+    window.addEventListener('dragend', handleDragEnd);
+    
+    return () => {
+      window.removeEventListener('dragstart', handleDragStart);
+      window.removeEventListener('dragend', handleDragEnd);
+    };
+  }, []);
+
   // Bidirectional windowing: adjust visible window based on scroll position
   const handleScroll = useCallback(() => {
     const container = scrollRef.current;
     if (!container) return;
+
+    // Don't adjust window during drag operations to prevent scroll jumping
+    if (isDragging) return;
 
     const scrollTop = container.scrollTop;
     const scrollHeight = container.scrollHeight;
@@ -61,7 +86,7 @@ export default function Column({ title, status, cards, totalCards, visibleCount,
     if (scrollHeight - scrollTop - clientHeight < 300 && visibleCount < totalCards) {
       useBoardStore.getState().loadMoreCards(status);
     }
-  }, [cards.length, status, totalCards, visibleCount]);
+  }, [cards.length, status, totalCards, visibleCount, isDragging]);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -71,9 +96,14 @@ export default function Column({ title, status, cards, totalCards, visibleCount,
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
-  const visibleCards = cards.slice(windowStart, windowEnd);
-  const topPadding = windowStart * 120; // Approximate height for scrolled cards
-  const bottomPadding = Math.max(0, (cards.length - windowEnd) * 120);
+  // During drag: show all loaded cards to prevent items disappearing
+  // During normal scroll: use virtual window for performance
+  const effectiveStart = isDragging || isOver ? 0 : windowStart;
+  const effectiveEnd = isDragging || isOver ? cards.length : windowEnd;
+  
+  const visibleCards = cards.slice(effectiveStart, effectiveEnd);
+  const topPadding = effectiveStart * 120; // Approximate height for scrolled cards
+  const bottomPadding = Math.max(0, (cards.length - effectiveEnd) * 120);
 
   return (
     <div className="flex-1 bg-gray-50 rounded-xl p-4 flex flex-col min-w-0 border border-gray-200 shadow-sm">
