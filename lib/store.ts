@@ -41,7 +41,7 @@ interface BoardStore {
   addCard: (card: Omit<Card, 'id'>) => void;
   updateCard: (id: string, updates: Partial<Card>) => void;
   deleteCard: (id: string) => void;
-  moveCard: (id: string, status: CardStatus) => void;
+  moveCard: (id: string, status: CardStatus, overId?: string) => void;
   reorderCards: (activeId: string, overId: string) => void;
 }
 
@@ -92,7 +92,7 @@ export const useBoardStore = create<BoardStore>((set) => ({
   setIsSearching: (isSearching) => set({ isSearching }),
   
   addCard: (card) => set((state) => ({
-    cards: [...state.cards, { ...card, labels: card.labels ?? [], id: `card-${Date.now()}` }],
+    cards: [{ ...card, labels: card.labels ?? [], id: `card-${Date.now()}` }, ...state.cards],
   })),
   
   updateCard: (id, updates) => set((state) => ({
@@ -105,11 +105,44 @@ export const useBoardStore = create<BoardStore>((set) => ({
     cards: state.cards.filter((card) => card.id !== id),
   })),
   
-  moveCard: (id, status) => set((state) => ({
-    cards: state.cards.map((card) =>
-      card.id === id ? { ...card, status } : card
-    ),
-  })),
+  moveCard: (id, status, overId) => set((state) => {
+    const cardIndex = state.cards.findIndex((c) => c.id === id);
+    if (cardIndex === -1) return state;
+    
+    const card = state.cards[cardIndex];
+    if (card.status === status) return state;
+    
+    // Remove card from current position
+    const newCards = state.cards.filter((c) => c.id !== id);
+    
+    if (overId) {
+      // Insert at the specific position (before the card with overId)
+      const targetIndex = newCards.findIndex((c) => c.id === overId);
+      if (targetIndex !== -1) {
+        newCards.splice(targetIndex, 0, { ...card, status });
+      } else {
+        // If overId not found, add to beginning of target column
+        const firstCardIndex = newCards.findIndex((c) => c.status === status);
+        if (firstCardIndex === -1) {
+          newCards.push({ ...card, status });
+        } else {
+          newCards.splice(firstCardIndex, 0, { ...card, status });
+        }
+      }
+    } else {
+      // No specific position, add to beginning of target column
+      const firstCardIndex = newCards.findIndex((c) => c.status === status);
+      if (firstCardIndex === -1) {
+        // No cards in target column, add to end
+        newCards.push({ ...card, status });
+      } else {
+        // Insert before the first card of target column
+        newCards.splice(firstCardIndex, 0, { ...card, status });
+      }
+    }
+    
+    return { cards: newCards };
+  }),
   
   reorderCards: (activeId: string, overId: string) => set((state) => {
     const oldIndex = state.cards.findIndex((c) => c.id === activeId);

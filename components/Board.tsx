@@ -127,7 +127,9 @@ export default function Board() {
       }
     } else {
       // Move to a different column
-      moveCard(activeId, targetStatus);
+      // Pass overId if dropping on a card (not directly on column)
+      const isDroppingOnCard = overId !== 'todo' && overId !== 'inprogress' && overId !== 'done';
+      moveCard(activeId, targetStatus, isDroppingOnCard ? overId : undefined);
     }
   };
 

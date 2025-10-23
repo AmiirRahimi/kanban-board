@@ -1,11 +1,10 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Card as CardType, CardStatus } from '@/lib/store';
-import { useBoardStore } from '@/lib/store';
 import Card from './Card';
 
 interface ColumnProps {
@@ -16,10 +15,7 @@ interface ColumnProps {
 }
 
 export default function Column({ title, status, cards, color }: ColumnProps) {
-  const addCard = useBoardStore((state) => state.addCard);
   const parentRef = useRef<HTMLDivElement>(null);
-  const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   const { setNodeRef, isOver } = useDroppable({
     id: status,
@@ -28,16 +24,24 @@ export default function Column({ title, status, cards, color }: ColumnProps) {
   const virtualizer = useVirtualizer({
     count: cards.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 160,
-    measureElement: (el) => el.getBoundingClientRect().height,
+    estimateSize: () => 120,
+    measureElement: (el) => {
+      if (!el) return 120;
+      const height = el.getBoundingClientRect().height;
+      return height || 120;
+    },
     overscan: 5,
     gap: 12,
   });
 
-  const handleAddCard = () => {
-    const ev = new CustomEvent('open-add-modal', { detail: { status } });
-    window.dispatchEvent(ev);
-  };
+  // Force remeasure when cards change or when drag state changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      virtualizer.measure();
+    }, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards.length, cards.map(c => c.id).join(','), isOver]);
 
   return (
     <div className="flex-1 bg-gray-50 rounded-xl p-4 flex flex-col min-w-0 border border-gray-200 shadow-sm">
@@ -53,10 +57,6 @@ export default function Column({ title, status, cards, color }: ColumnProps) {
       <div className={`h-1 w-full rounded-full mb-4 ${
         color.replace('bg-', 'bg-')
       } opacity-60`}></div>
-      
-      <div className="mb-4">
-        <button onClick={handleAddCard} className="px-3 py-2 bg-white border-2 border-dashed border-gray-300 text-gray-600 rounded-lg hover:border-gray-400 hover:bg-gray-50 text-sm font-medium transition-all">+ Add a card</button>
-      </div>
 
       <div
         ref={parentRef}
@@ -71,6 +71,7 @@ export default function Column({ title, status, cards, color }: ColumnProps) {
             height: `${virtualizer.getTotalSize()}px`,
             width: '100%',
             position: 'relative',
+            minHeight: '100px',
           }}
         >
           <SortableContext id={status} items={cards.map(c => c.id)} strategy={verticalListSortingStrategy}>
@@ -87,12 +88,13 @@ export default function Column({ title, status, cards, color }: ColumnProps) {
                     left: 0,
                     width: '100%',
                     transform: `translateY(${virtualItem.start}px)`,
+                    willChange: 'transform',
                   }}
                 >
                   <Card
                     card={card}
                     onResize={() => {
-                      // measurement is handled via ref+ResizeObserver by react-virtual when measureElement is provided
+                      virtualizer.measure();
                     }}
                   />
                 </div>

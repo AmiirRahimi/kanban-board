@@ -32,8 +32,9 @@ const Card = memo(({ card, onResize }: CardProps) => {
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.6 : 1,
+    transition: transition || 'transform 200ms ease',
+    opacity: isDragging ? 0 : 1,
+    pointerEvents: isDragging ? ('none' as const) : ('auto' as const),
   };
 
   useEffect(() => {
@@ -57,9 +58,9 @@ const Card = memo(({ card, onResize }: CardProps) => {
   if (isEditing) {
     return (
       <div
-        ref={setNodeRef}
-        style={style}
-        className="bg-white p-4 rounded-lg shadow-md border border-gray-200 mb-3"
+      ref={setNodeRef}
+      style={style}
+      className="bg-white p-4 rounded-lg shadow-md border border-gray-200"
       >
         <input
           type="text"
@@ -138,48 +139,21 @@ const Card = memo(({ card, onResize }: CardProps) => {
         })}
       </div>
       <div className="flex items-start mb-2">
-        <h3 className="font-semibold text-sm text-gray-800 flex-1 mr-2 line-clamp-2">{card.title}</h3>
+        <h3 className="font-semibold text-sm text-gray-800 flex-1 mr-2">{card.title}</h3>
         <div className="flex items-center gap-1">
           <button
             aria-label="Drag"
             {...attributes}
             {...listeners}
-            className="p-1 rounded hover:bg-gray-100 cursor-grab active:cursor-grabbing text-gray-500"
+            className="p-1 rounded hover:bg-gray-100 cursor-grab active:cursor-grabbing text-gray-500 flex-shrink-0"
             onClick={(e) => e.stopPropagation()}
           >
             ⠿
           </button>
         </div>
       </div>
-      <p className="text-xs text-gray-600 mb-3 line-clamp-2">{card.description}</p>
-      <div className="flex items-center justify-between text-[11px] text-gray-500">
-        <div className="flex items-center gap-3">
-          {typeof card.dueDate === 'string' && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-              ⏰ {new Date(card.dueDate).toLocaleDateString()}
-            </span>
-          )}
-          {card.checklistTotal ? (
-            <span className="inline-flex items-center gap-1">☑️ {card.checklistDone}/{card.checklistTotal}</span>
-          ) : null}
-          {card.comments ? (
-            <span className="inline-flex items-center gap-1">💬 {card.comments}</span>
-          ) : null}
-          {card.attachments ? (
-            <span className="inline-flex items-center gap-1">📎 {card.attachments}</span>
-          ) : null}
-        </div>
-        {card.members && card.members.length > 0 && (
-          <div className="flex -space-x-2">
-            {card.members.slice(0, 3).map(m => (
-              <span key={m.id} className="inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-semibold border border-white shadow-sm" style={{ backgroundColor: m.color }}>
-                {m.initials}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity relative">
+      <p className="text-xs text-gray-600 mb-3 whitespace-pre-wrap">{card.description}</p>
+      <div className="flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity relative mt-2">
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -225,7 +199,7 @@ const Card = memo(({ card, onResize }: CardProps) => {
   const a = prevProps.card;
   const b = nextProps.card;
   const labelsEqual = JSON.stringify(a.labels ?? []) === JSON.stringify(b.labels ?? []);
-  return a.id === b.id && a.title === b.title && a.description === b.description && a.status === b.status && labelsEqual && a.dueDate === b.dueDate && a.comments === b.comments && a.attachments === b.attachments && a.checklistDone === b.checklistDone && a.checklistTotal === b.checklistTotal;
+  return a.id === b.id && a.title === b.title && a.description === b.description && a.status === b.status && labelsEqual;
 });
 
 Card.displayName = 'Card';
