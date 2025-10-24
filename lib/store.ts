@@ -69,6 +69,25 @@ const INITIAL_LOAD = 50;
 const LOAD_MORE_CHUNK = 30;
 const DEFAULT_TOTAL_CARDS = 5000;
 const MAX_SEARCH_RESULTS = 100;
+const STORAGE_KEY = 'kanban-board-cards';
+
+const saveToLocalStorage = (cards: Card[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+  } catch (error) {
+    console.error('Failed to save to localStorage:', error);
+  }
+};
+
+const loadFromLocalStorage = (): Card[] | null => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch (error) {
+    console.error('Failed to load from localStorage:', error);
+    return null;
+  }
+};
 
 export const useBoardStore = create<BoardStore>((set, get) => ({
   allCards: [],
@@ -107,12 +126,22 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
 
       switch (message.type) {
         case 'GENERATED':
+          const storedCards = loadFromLocalStorage();
+          const cardsToUse = storedCards || message.cards;
+          
           set({
-            allCards: message.cards,
-            cards: message.cards,
+            allCards: cardsToUse,
+            cards: cardsToUse,
             isLoading: false,
           });
-          // Trigger initial filter
+          
+          if (!storedCards) {
+            saveToLocalStorage(cardsToUse);
+          } else {
+            // Sync localStorage data back to worker so it has the correct data
+            worker.postMessage({ type: 'SYNC_CARDS', cards: storedCards });
+          }
+          
           get().requestFilter();
           break;
 
@@ -195,6 +224,8 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
     const state = get();
     if (!state.worker) return;
 
+    localStorage.removeItem(STORAGE_KEY);
+
     set({
       totalCardsCount: DEFAULT_TOTAL_CARDS,
       visibleCount: { todo: INITIAL_LOAD, inprogress: INITIAL_LOAD, done: INITIAL_LOAD },
@@ -208,20 +239,126 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
 
   addCard: (card) => {
     const state = get();
-    if (!state.worker) return;
-    state.worker.postMessage({ type: 'ADD_CARD', card });
+    const newCard: Card = {
+      ...card,
+      labels: card.labels ?? [],
+      id: `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    };
+    
+    const newCards = [newCard, ...state.allCards];
+    saveToLocalStorage(newCards);
+
+    const filtered = state.searchQuery.trim() ? 
+      newCards.filter((c) => 
+        c.title.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+        c.description.toLowerCase().includes(state.searchQuery.toLowerCase())
+      ) : newCards;
+    
+    const todoCards = filtered.filter((c) => c.status === 'todo');
+    const inprogressCards = filtered.filter((c) => c.status === 'inprogress');
+    const doneCards = filtered.filter((c) => c.status === 'done');
+    
+    const isSearching = state.searchQuery.trim().length > 0;
+    const limit = isSearching ? MAX_SEARCH_RESULTS : Infinity;
+    
+    set({ 
+      allCards: newCards, 
+      cards: newCards,
+      filteredCards: {
+        todo: todoCards.slice(0, isSearching ? limit : state.visibleCount.todo),
+        inprogress: inprogressCards.slice(0, isSearching ? limit : state.visibleCount.inprogress),
+        done: doneCards.slice(0, isSearching ? limit : state.visibleCount.done),
+      },
+      totals: {
+        todo: todoCards.length,
+        inprogress: inprogressCards.length,
+        done: doneCards.length,
+      }
+    });
+
+    if (state.worker) {
+      state.worker.postMessage({ type: 'ADD_CARD', card });
+    }
   },
 
   updateCard: (id, updates) => {
     const state = get();
-    if (!state.worker) return;
-    state.worker.postMessage({ type: 'UPDATE_CARD', id, updates });
+    const cardIndex = state.allCards.findIndex((c) => c.id === id);
+    if (cardIndex === -1) return;
+
+    const newCards = [...state.allCards];
+    newCards[cardIndex] = { ...newCards[cardIndex], ...updates };
+    saveToLocalStorage(newCards);
+
+    const filtered = state.searchQuery.trim() ? 
+      newCards.filter((c) => 
+        c.title.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+        c.description.toLowerCase().includes(state.searchQuery.toLowerCase())
+      ) : newCards;
+    
+    const todoCards = filtered.filter((c) => c.status === 'todo');
+    const inprogressCards = filtered.filter((c) => c.status === 'inprogress');
+    const doneCards = filtered.filter((c) => c.status === 'done');
+    
+    const isSearching = state.searchQuery.trim().length > 0;
+    const limit = isSearching ? MAX_SEARCH_RESULTS : Infinity;
+    
+    set({ 
+      allCards: newCards, 
+      cards: newCards,
+      filteredCards: {
+        todo: todoCards.slice(0, isSearching ? limit : state.visibleCount.todo),
+        inprogress: inprogressCards.slice(0, isSearching ? limit : state.visibleCount.inprogress),
+        done: doneCards.slice(0, isSearching ? limit : state.visibleCount.done),
+      },
+      totals: {
+        todo: todoCards.length,
+        inprogress: inprogressCards.length,
+        done: doneCards.length,
+      }
+    });
+
+    if (state.worker) {
+      state.worker.postMessage({ type: 'UPDATE_CARD', id, updates });
+    }
   },
 
   deleteCard: (id) => {
     const state = get();
-    if (!state.worker) return;
-    state.worker.postMessage({ type: 'DELETE_CARD', id });
+    const newCards = state.allCards.filter((c) => c.id !== id);
+    saveToLocalStorage(newCards);
+
+    const filtered = state.searchQuery.trim() ? 
+      newCards.filter((c) => 
+        c.title.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+        c.description.toLowerCase().includes(state.searchQuery.toLowerCase())
+      ) : newCards;
+    
+    const todoCards = filtered.filter((c) => c.status === 'todo');
+    const inprogressCards = filtered.filter((c) => c.status === 'inprogress');
+    const doneCards = filtered.filter((c) => c.status === 'done');
+    
+    const isSearching = state.searchQuery.trim().length > 0;
+    const limit = isSearching ? MAX_SEARCH_RESULTS : Infinity;
+    
+    set({ 
+      allCards: newCards, 
+      cards: newCards,
+      filteredCards: {
+        todo: todoCards.slice(0, isSearching ? limit : state.visibleCount.todo),
+        inprogress: inprogressCards.slice(0, isSearching ? limit : state.visibleCount.inprogress),
+        done: doneCards.slice(0, isSearching ? limit : state.visibleCount.done),
+      },
+      totals: {
+        todo: todoCards.length,
+        inprogress: inprogressCards.length,
+        done: doneCards.length,
+      }
+    });
+
+    if (state.worker) {
+      state.worker.postMessage({ type: 'DELETE_CARD', id });
+    }
   },
 
   moveCard: (id, status, overId) => {
@@ -255,7 +392,8 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
       }
     }
     
-    // Optimistic update: filter synchronously for instant UI feedback
+    saveToLocalStorage(newCards);
+
     const filtered = state.searchQuery.trim() ? 
       newCards.filter((c) => 
         c.title.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
@@ -299,8 +437,8 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
     const newCards = [...state.allCards];
     const [movedCard] = newCards.splice(oldIndex, 1);
     newCards.splice(newIndex, 0, movedCard);
-    
-    // Optimistic update: filter synchronously for instant UI feedback
+    saveToLocalStorage(newCards);
+
     const filtered = state.searchQuery.trim() ? 
       newCards.filter((c) => 
         c.title.toLowerCase().includes(state.searchQuery.toLowerCase()) ||

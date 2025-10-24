@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Card as CardType, Label, LABEL_OPTIONS, CardStatus } from '@/lib/store';
 
 interface CardModalProps {
@@ -12,17 +12,10 @@ interface CardModalProps {
 }
 
 export default function CardModal({ open, mode, initial, onClose, onSubmit }: CardModalProps) {
-  const initialValues = useMemo(() => ({
-    title: initial?.title ?? '',
-    description: initial?.description ?? '',
-    labels: initial?.labels ?? [],
-    status: initial?.status ?? 'todo' as CardStatus,
-  }), [initial]);
-
-  const [title, setTitle] = useState(initialValues.title);
-  const [description, setDescription] = useState(initialValues.description);
-  const [labels, setLabels] = useState<Label[]>(initialValues.labels);
-  const [status, setStatus] = useState<CardStatus>(initialValues.status);
+  const [title, setTitle] = useState(initial?.title ?? '');
+  const [description, setDescription] = useState(initial?.description ?? '');
+  const [labels, setLabels] = useState<Label[]>(initial?.labels ?? []);
+  const [status, setStatus] = useState<CardStatus>(initial?.status ?? 'todo');
 
   if (!open) return null;
 

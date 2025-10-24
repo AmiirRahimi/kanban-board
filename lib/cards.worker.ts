@@ -106,6 +106,11 @@ interface ResetMessage {
   type: 'RESET';
 }
 
+interface SyncCardsMessage {
+  type: 'SYNC_CARDS';
+  cards: Card[];
+}
+
 type WorkerMessage = 
   | GenerateMessage 
   | FilterMessage 
@@ -114,7 +119,8 @@ type WorkerMessage =
   | DeleteCardMessage 
   | MoveCardMessage
   | ReorderCardsMessage
-  | ResetMessage;
+  | ResetMessage
+  | SyncCardsMessage;
 
 self.onmessage = (e: MessageEvent<WorkerMessage>) => {
   const message = e.data;
@@ -269,6 +275,11 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
         type: 'UPDATED',
         cards: allCards,
       });
+      break;
+    }
+
+    case 'SYNC_CARDS': {
+      allCards = message.cards;
       break;
     }
   }

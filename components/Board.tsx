@@ -1,6 +1,6 @@
 'use client';
 
-import { useDeferredValue, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -37,31 +37,26 @@ export default function Board() {
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [editingCard, setEditingCard] = useState<string | null>(null);
 
-  const deferredSearchQuery = useDeferredValue(inputValue);
-
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     })
   );
 
-  // Initialize worker on mount
   useEffect(() => {
     initializeWorker();
   }, [initializeWorker]);
 
-  // Update search query with debounced value
   useEffect(() => {
-    setSearchQuery(deferredSearchQuery);
-  }, [deferredSearchQuery, setSearchQuery]);
+    const debounceTimer = setTimeout(() => {
+      if (inputValue !== searchQuery) {
+        setIsSearching(true);
+        setSearchQuery(inputValue);
+      }
+    }, 500);
 
-  useEffect(() => {
-    if (inputValue !== deferredSearchQuery) {
-      setIsSearching(true);
-    } else {
-      setIsSearching(false);
-    }
-  }, [inputValue, deferredSearchQuery, setIsSearching]);
+    return () => clearTimeout(debounceTimer);
+  }, [inputValue, setSearchQuery, setIsSearching, searchQuery]);
 
   useEffect(() => {
     const handler = (e: CustomEvent<{ id: string }>) => {
