@@ -14,6 +14,7 @@ export default function Settings() {
     const count = parseInt(cardCountInput);
     if (!isNaN(count) && count > 0 && count <= 50000) {
       setTotalCardsCount(count);
+      setSettingsOpen(false);
     }
   };
 

@@ -154,15 +154,20 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
           break;
 
         case 'UPDATED':
-          // Prevent overwriting optimistic updates - only sync if data actually changed
           const currentCards = get().allCards;
-          if (currentCards.length !== message.cards.length || 
-              JSON.stringify(currentCards.map(c => c.id)) !== JSON.stringify(message.cards.map((c: Card) => c.id))) {
+          const cardsChanged = currentCards.length !== message.cards.length || 
+              JSON.stringify(currentCards.map(c => c.id)) !== JSON.stringify(message.cards.map((c: Card) => c.id));
+          
+          if (cardsChanged) {
             set({
               allCards: message.cards,
               cards: message.cards,
+              isLoading: false,
             });
+            saveToLocalStorage(message.cards);
             get().requestFilter();
+          } else {
+            set({ isLoading: false });
           }
           break;
       }
@@ -206,6 +211,8 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
   setTotalCardsCount: (count: number) => {
     const state = get();
     if (!state.worker) return;
+
+    localStorage.removeItem(STORAGE_KEY);
 
     set({
       totalCardsCount: count,
