@@ -16,11 +16,13 @@ interface ColumnProps {
 }
 
 export default function Column({ title, status, cards, totalCards, visibleCount, color }: ColumnProps) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: status,
-  });
-  
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const { setNodeRef, isOver } = useDroppable({ id: status });
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const handleRef = (node: HTMLDivElement | null) => {
+    setNodeRef(node);
+    scrollRef.current = node;
+  };
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -56,12 +58,12 @@ export default function Column({ title, status, cards, totalCards, visibleCount,
       } opacity-60`}></div>
 
       <div
-        ref={scrollRef}
-        className={`flex-1 overflow-auto rounded-lg ${
+        ref={handleRef}
+        className={`flex-1 overflow-auto rounded-lg transition-colors ${
           isOver ? 'bg-blue-50 ring-2 ring-blue-300' : ''
         }`}
       >
-        <div ref={setNodeRef} className="space-y-3 pb-2 min-h-[100px]">
+        <div className="space-y-3 pb-2 min-h-full p-2">
           <SortableContext id={status} items={cards.map(c => c.id)} strategy={verticalListSortingStrategy}>
             {cards.map((card) => (
               <Card key={card.id} card={card} />

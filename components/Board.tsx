@@ -18,7 +18,7 @@ import CardModal from './CardModal';
 import Settings from './Settings';
 
 export default function Board() {
-  const cards = useBoardStore((state) => state.cards);
+  const allCards = useBoardStore((state) => state.allCards);
   const filteredCards = useBoardStore((state) => state.filteredCards);
   const totals = useBoardStore((state) => state.totals);
   const visibleCount = useBoardStore((state) => state.visibleCount);
@@ -29,6 +29,7 @@ export default function Board() {
   const isLoading = useBoardStore((state) => state.isLoading);
   const initializeWorker = useBoardStore((state) => state.initializeWorker);
   const moveCard = useBoardStore((state) => state.moveCard);
+  const reorderCards = useBoardStore((state) => state.reorderCards);
   
   const [activeId, setActiveId] = useState<string | null>(null);
   const [inputValue, setInputValue] = useState('');
@@ -40,9 +41,7 @@ export default function Board() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
+      activationConstraint: { distance: 8 },
     })
   );
 
@@ -105,9 +104,8 @@ export default function Board() {
 
     const activeId = active.id as string;
     const overId = over.id as string;
+    const activeCard = allCards.find(c => c.id === activeId);
     
-    // Find the active card
-    const activeCard = cards.find(c => c.id === activeId);
     if (!activeCard) return;
 
     let targetStatus: CardStatus | null = null;
@@ -115,7 +113,6 @@ export default function Board() {
     if (overId === 'todo' || overId === 'inprogress' || overId === 'done') {
       targetStatus = overId;
     } else {
-      // Extract container ID from sortable context when dropping on a card
       const containerId = (over.data?.current as { sortable?: { containerId: CardStatus } })?.sortable?.containerId;
       if (containerId === 'todo' || containerId === 'inprogress' || containerId === 'done') {
         targetStatus = containerId;
@@ -127,7 +124,7 @@ export default function Board() {
     if (activeCard.status === targetStatus) {
       // Same column: just reorder
       if (activeId !== overId) {
-        useBoardStore.getState().reorderCards(activeId, overId);
+        reorderCards(activeId, overId);
       }
     } else {
       // Different column: move and optionally position near dropped card
@@ -140,8 +137,8 @@ export default function Board() {
     setInputValue(value);
   };
 
-  const activeCard = activeId ? cards.find((c) => c.id === activeId) : null;
-  const editingCardObj = editingCard ? cards.find((c) => c.id === editingCard) : undefined;
+  const activeCard = activeId ? allCards.find((c) => c.id === activeId) : null;
+  const editingCardObj = editingCard ? allCards.find((c) => c.id === editingCard) : undefined;
 
   return (
     <div className="h-screen flex flex-col p-8 bg-gradient-to-br from-gray-50 to-gray-100">
@@ -237,23 +234,14 @@ export default function Board() {
         onClose={() => setModalOpen(false)}
         onSubmit={(data) => {
           if (modalMode === 'add') {
-            useBoardStore.getState().addCard({
-              title: data.title,
-              description: data.description,
-              status: data.status,
-              labels: data.labels,
-            });
+            useBoardStore.getState().addCard(data);
           } else if (modalMode === 'edit' && editingCardObj) {
-            useBoardStore.getState().updateCard(editingCardObj.id, {
-              title: data.title,
-              description: data.description,
-              status: data.status,
-              labels: data.labels,
-            });
+            useBoardStore.getState().updateCard(editingCardObj.id, data);
           }
         }}
       />
     </div>
   );
 }
+
 

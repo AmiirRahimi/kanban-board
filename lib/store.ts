@@ -65,11 +65,10 @@ interface BoardStore {
   requestFilter: () => void;
 }
 
-// Chunked loading strategy: Start with fewer cards, load more on demand
 const INITIAL_LOAD = 50;
 const LOAD_MORE_CHUNK = 30;
 const DEFAULT_TOTAL_CARDS = 5000;
-const MAX_SEARCH_RESULTS = 100; // Limit search results to prevent rendering thousands of cards
+const MAX_SEARCH_RESULTS = 100;
 
 export const useBoardStore = create<BoardStore>((set, get) => ({
   allCards: [],
@@ -97,7 +96,7 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
 
   initializeWorker: () => {
     const state = get();
-    if (state.worker) return; // Already initialized
+    if (state.worker) return;
 
     const worker = new Worker(new URL('./cards.worker.ts', import.meta.url), {
       type: 'module',
@@ -126,19 +125,22 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
           break;
 
         case 'UPDATED':
-          set({
-            allCards: message.cards,
-            cards: message.cards,
-          });
-          // Trigger filter after update
-          get().requestFilter();
+          // Prevent overwriting optimistic updates - only sync if data actually changed
+          const currentCards = get().allCards;
+          if (currentCards.length !== message.cards.length || 
+              JSON.stringify(currentCards.map(c => c.id)) !== JSON.stringify(message.cards.map((c: Card) => c.id))) {
+            set({
+              allCards: message.cards,
+              cards: message.cards,
+            });
+            get().requestFilter();
+          }
           break;
       }
     };
 
     // Initialize with default count
     worker.postMessage({ type: 'GENERATE', count: DEFAULT_TOTAL_CARDS });
-
     set({ worker });
   },
 
@@ -195,11 +197,7 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
 
     set({
       totalCardsCount: DEFAULT_TOTAL_CARDS,
-      visibleCount: {
-        todo: INITIAL_LOAD,
-        inprogress: INITIAL_LOAD,
-        done: INITIAL_LOAD,
-      },
+      visibleCount: { todo: INITIAL_LOAD, inprogress: INITIAL_LOAD, done: INITIAL_LOAD },
       searchQuery: '',
       isSearching: false,
       isLoading: true,
@@ -228,14 +226,112 @@ export const useBoardStore = create<BoardStore>((set, get) => ({
 
   moveCard: (id, status, overId) => {
     const state = get();
-    if (!state.worker) return;
-    state.worker.postMessage({ type: 'MOVE_CARD', id, status, overId });
+    const cardIndex = state.allCards.findIndex((c) => c.id === id);
+    if (cardIndex === -1) return;
+    
+    const card = state.allCards[cardIndex];
+    if (card.status === status) return;
+    
+    const newCards = state.allCards.filter((c) => c.id !== id);
+    
+    if (overId) {
+      const targetIndex = newCards.findIndex((c) => c.id === overId);
+      if (targetIndex !== -1) {
+        newCards.splice(targetIndex, 0, { ...card, status });
+      } else {
+        const firstCardIndex = newCards.findIndex((c) => c.status === status);
+        if (firstCardIndex === -1) {
+          newCards.push({ ...card, status });
+        } else {
+          newCards.splice(firstCardIndex, 0, { ...card, status });
+        }
+      }
+    } else {
+      const firstCardIndex = newCards.findIndex((c) => c.status === status);
+      if (firstCardIndex === -1) {
+        newCards.push({ ...card, status });
+      } else {
+        newCards.splice(firstCardIndex, 0, { ...card, status });
+      }
+    }
+    
+    // Optimistic update: filter synchronously for instant UI feedback
+    const filtered = state.searchQuery.trim() ? 
+      newCards.filter((c) => 
+        c.title.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+        c.description.toLowerCase().includes(state.searchQuery.toLowerCase())
+      ) : newCards;
+    
+    const todoCards = filtered.filter((c) => c.status === 'todo');
+    const inprogressCards = filtered.filter((c) => c.status === 'inprogress');
+    const doneCards = filtered.filter((c) => c.status === 'done');
+    
+    const isSearching = state.searchQuery.trim().length > 0;
+    const limit = isSearching ? MAX_SEARCH_RESULTS : Infinity;
+    
+    set({ 
+      allCards: newCards, 
+      cards: newCards,
+      filteredCards: {
+        todo: todoCards.slice(0, isSearching ? limit : state.visibleCount.todo),
+        inprogress: inprogressCards.slice(0, isSearching ? limit : state.visibleCount.inprogress),
+        done: doneCards.slice(0, isSearching ? limit : state.visibleCount.done),
+      },
+      totals: {
+        todo: todoCards.length,
+        inprogress: inprogressCards.length,
+        done: doneCards.length,
+      }
+    });
+    
+    if (state.worker) {
+      state.worker.postMessage({ type: 'MOVE_CARD', id, status, overId });
+    }
   },
 
   reorderCards: (activeId: string, overId: string) => {
     const state = get();
-    if (!state.worker) return;
-    state.worker.postMessage({ type: 'REORDER_CARDS', activeId, overId });
+    const oldIndex = state.allCards.findIndex((c) => c.id === activeId);
+    const newIndex = state.allCards.findIndex((c) => c.id === overId);
+    
+    if (oldIndex === -1 || newIndex === -1) return;
+    
+    const newCards = [...state.allCards];
+    const [movedCard] = newCards.splice(oldIndex, 1);
+    newCards.splice(newIndex, 0, movedCard);
+    
+    // Optimistic update: filter synchronously for instant UI feedback
+    const filtered = state.searchQuery.trim() ? 
+      newCards.filter((c) => 
+        c.title.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+        c.description.toLowerCase().includes(state.searchQuery.toLowerCase())
+      ) : newCards;
+    
+    const todoCards = filtered.filter((c) => c.status === 'todo');
+    const inprogressCards = filtered.filter((c) => c.status === 'inprogress');
+    const doneCards = filtered.filter((c) => c.status === 'done');
+    
+    const isSearching = state.searchQuery.trim().length > 0;
+    const limit = isSearching ? MAX_SEARCH_RESULTS : Infinity;
+    
+    set({ 
+      allCards: newCards, 
+      cards: newCards,
+      filteredCards: {
+        todo: todoCards.slice(0, isSearching ? limit : state.visibleCount.todo),
+        inprogress: inprogressCards.slice(0, isSearching ? limit : state.visibleCount.inprogress),
+        done: doneCards.slice(0, isSearching ? limit : state.visibleCount.done),
+      },
+      totals: {
+        todo: todoCards.length,
+        inprogress: inprogressCards.length,
+        done: doneCards.length,
+      }
+    });
+    
+    if (state.worker) {
+      state.worker.postMessage({ type: 'REORDER_CARDS', activeId, overId });
+    }
   },
 }));
 

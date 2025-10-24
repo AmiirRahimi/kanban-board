@@ -159,11 +159,7 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
 
       self.postMessage({
         type: 'FILTERED',
-        cards: {
-          todo,
-          inprogress,
-          done,
-        },
+        cards: { todo, inprogress, done },
         totals: {
           todo: todoCards.length,
           inprogress: inprogressCards.length,
