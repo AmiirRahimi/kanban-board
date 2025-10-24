@@ -34,11 +34,24 @@ export interface Card {
 
 interface BoardStore {
   cards: Card[];
-  allCards: Card[]; // Store all cards
-  totalCardsCount: number; // Total number of cards to generate
-  visibleCount: { [key in CardStatus]: number }; // How many cards to show per column
+  allCards: Card[]; // Store all cards from worker
+  filteredCards: {
+    todo: Card[];
+    inprogress: Card[];
+    done: Card[];
+  };
+  totals: {
+    todo: number;
+    inprogress: number;
+    done: number;
+  };
+  totalCardsCount: number;
+  visibleCount: { [key in CardStatus]: number };
   searchQuery: string;
   isSearching: boolean;
+  isLoading: boolean;
+  worker: Worker | null;
+  initializeWorker: () => void;
   setSearchQuery: (query: string) => void;
   setIsSearching: (isSearching: boolean) => void;
   loadMoreCards: (status: CardStatus) => void;
@@ -49,69 +62,29 @@ interface BoardStore {
   deleteCard: (id: string) => void;
   moveCard: (id: string, status: CardStatus, overId?: string) => void;
   reorderCards: (activeId: string, overId: string) => void;
+  requestFilter: () => void;
 }
 
-const generateFakeCards = (count: number): Card[] => {
-  const statuses: CardStatus[] = ['todo', 'inprogress', 'done'];
-  const cards: Card[] = [];
-  
-  // Distribute cards evenly across columns
-  const cardsPerColumn = Math.ceil(count / 3);
-  
-  for (let statusIndex = 0; statusIndex < 3; statusIndex++) {
-    const status = statuses[statusIndex];
-    const startNum = statusIndex * cardsPerColumn;
-    const endNum = Math.min(startNum + cardsPerColumn, count);
-    
-    for (let i = startNum; i < endNum; i++) {
-      const cardNumber = i - startNum + 1; // Sequential number within column
-      
-      const labels: Label[] = [];
-      if (cardNumber % 7 === 0) labels.push(LABEL_OPTIONS[cardNumber % LABEL_OPTIONS.length]);
-      if (cardNumber % 13 === 0) labels.push(LABEL_OPTIONS[(cardNumber + 2) % LABEL_OPTIONS.length]);
-
-      const checklistTotal = cardNumber % 5 === 0 ? 3 : cardNumber % 7 === 0 ? 5 : 0;
-      const checklistDone = checklistTotal ? Math.min(checklistTotal, cardNumber % (checklistTotal + 1)) : 0;
-      const comments = cardNumber % 9 === 0 ? (cardNumber % 4) + 1 : 0;
-      const attachments = cardNumber % 11 === 0 ? (cardNumber % 3) + 1 : 0;
-      const dueDate = cardNumber % 6 === 0 ? new Date('2024-01-01').toISOString() : undefined;
-      const members = (cardNumber % 8 === 0)
-        ? [
-            { id: `m-a-${i}`, initials: 'AR', color: '#f97316' },
-            { id: `m-b-${i}`, initials: 'MS', color: '#22c55e' },
-          ]
-        : [];
-      
-      cards.push({
-        id: `card-${i}`,
-        title: `Task ${cardNumber}`,
-        description: `This is the description for task ${cardNumber}`,
-        status,
-        labels,
-        checklistDone,
-        checklistTotal,
-        comments,
-        attachments,
-        dueDate,
-        members,
-      });
-    }
-  }
-  
-  return cards;
-};
-
 // Chunked loading strategy: Start with fewer cards, load more on demand
-// This prevents lag with thousands of cards by only rendering what's needed
 const INITIAL_LOAD = 50;
 const LOAD_MORE_CHUNK = 30;
 const DEFAULT_TOTAL_CARDS = 5000;
+const MAX_SEARCH_RESULTS = 100; // Limit search results to prevent rendering thousands of cards
 
-export const useBoardStore = create<BoardStore>((set) => ({
-  allCards: generateFakeCards(DEFAULT_TOTAL_CARDS),
-  cards: generateFakeCards(DEFAULT_TOTAL_CARDS),
+export const useBoardStore = create<BoardStore>((set, get) => ({
+  allCards: [],
+  cards: [],
+  filteredCards: {
+    todo: [],
+    inprogress: [],
+    done: [],
+  },
+  totals: {
+    todo: 0,
+    inprogress: 0,
+    done: 0,
+  },
   totalCardsCount: DEFAULT_TOTAL_CARDS,
-  // Track how many cards should be visible per column (rest hidden until "Load More")
   visibleCount: {
     todo: INITIAL_LOAD,
     inprogress: INITIAL_LOAD,
@@ -119,37 +92,108 @@ export const useBoardStore = create<BoardStore>((set) => ({
   },
   searchQuery: '',
   isSearching: false,
-  
-  setSearchQuery: (query) => set({ searchQuery: query }),
+  isLoading: true,
+  worker: null,
+
+  initializeWorker: () => {
+    const state = get();
+    if (state.worker) return; // Already initialized
+
+    const worker = new Worker(new URL('./cards.worker.ts', import.meta.url), {
+      type: 'module',
+    });
+
+    worker.onmessage = (e) => {
+      const message = e.data;
+
+      switch (message.type) {
+        case 'GENERATED':
+          set({
+            allCards: message.cards,
+            cards: message.cards,
+            isLoading: false,
+          });
+          // Trigger initial filter
+          get().requestFilter();
+          break;
+
+        case 'FILTERED':
+          set({
+            filteredCards: message.cards,
+            totals: message.totals,
+            isSearching: false,
+          });
+          break;
+
+        case 'UPDATED':
+          set({
+            allCards: message.cards,
+            cards: message.cards,
+          });
+          // Trigger filter after update
+          get().requestFilter();
+          break;
+      }
+    };
+
+    // Initialize with default count
+    worker.postMessage({ type: 'GENERATE', count: DEFAULT_TOTAL_CARDS });
+
+    set({ worker });
+  },
+
+  requestFilter: () => {
+    const state = get();
+    if (!state.worker) return;
+
+    state.worker.postMessage({
+      type: 'FILTER',
+      searchQuery: state.searchQuery,
+      visibleCount: state.visibleCount,
+      maxSearchResults: MAX_SEARCH_RESULTS,
+    });
+  },
+
+  setSearchQuery: (query) => {
+    set({ searchQuery: query, isSearching: true });
+    // Debounce is handled by useDeferredValue in component
+    get().requestFilter();
+  },
+
   setIsSearching: (isSearching) => set({ isSearching }),
-  
-  loadMoreCards: (status: CardStatus) => set((state) => ({
-    visibleCount: {
-      ...state.visibleCount,
-      [status]: state.visibleCount[status] + LOAD_MORE_CHUNK,
-    },
-  })),
-  
+
+  loadMoreCards: (status: CardStatus) => {
+    set((state) => ({
+      visibleCount: {
+        ...state.visibleCount,
+        [status]: state.visibleCount[status] + LOAD_MORE_CHUNK,
+      },
+    }));
+    get().requestFilter();
+  },
+
   setTotalCardsCount: (count: number) => {
-    const newCards = generateFakeCards(count);
+    const state = get();
+    if (!state.worker) return;
+
     set({
-      cards: newCards,
-      allCards: newCards,
       totalCardsCount: count,
       visibleCount: {
         todo: INITIAL_LOAD,
         inprogress: INITIAL_LOAD,
         done: INITIAL_LOAD,
       },
+      isLoading: true,
     });
+
+    state.worker.postMessage({ type: 'GENERATE', count });
   },
-  
+
   resetOrder: () => {
-    // Complete reset: back to 5000 cards, original order, no edits
-    const newCards = generateFakeCards(DEFAULT_TOTAL_CARDS);
+    const state = get();
+    if (!state.worker) return;
+
     set({
-      cards: newCards,
-      allCards: newCards,
       totalCardsCount: DEFAULT_TOTAL_CARDS,
       visibleCount: {
         todo: INITIAL_LOAD,
@@ -158,69 +202,40 @@ export const useBoardStore = create<BoardStore>((set) => ({
       },
       searchQuery: '',
       isSearching: false,
+      isLoading: true,
     });
+
+    state.worker.postMessage({ type: 'RESET' });
   },
-  
-  addCard: (card) => set((state) => ({
-    cards: [{ ...card, labels: card.labels ?? [], id: `card-${Math.random().toString(36).substr(2, 9)}` }, ...state.cards],
-  })),
-  
-  updateCard: (id, updates) => set((state) => ({
-    cards: state.cards.map((card) =>
-      card.id === id ? { ...card, ...updates } : card
-    ),
-  })),
-  
-  deleteCard: (id) => set((state) => ({
-    cards: state.cards.filter((card) => card.id !== id),
-  })),
-  
-  moveCard: (id, status, overId) => set((state) => {
-    const cardIndex = state.cards.findIndex((c) => c.id === id);
-    if (cardIndex === -1) return state;
-    
-    const card = state.cards[cardIndex];
-    if (card.status === status) return state;
-    
-    const newCards = state.cards.filter((c) => c.id !== id);
-    
-    if (overId) {
-      // Dropped on specific card: insert before that card
-      const targetIndex = newCards.findIndex((c) => c.id === overId);
-      if (targetIndex !== -1) {
-        newCards.splice(targetIndex, 0, { ...card, status });
-      } else {
-        const firstCardIndex = newCards.findIndex((c) => c.status === status);
-        if (firstCardIndex === -1) {
-          newCards.push({ ...card, status });
-        } else {
-          newCards.splice(firstCardIndex, 0, { ...card, status });
-        }
-      }
-    } else {
-      // Dropped on column: add to beginning of that column
-      const firstCardIndex = newCards.findIndex((c) => c.status === status);
-      if (firstCardIndex === -1) {
-        newCards.push({ ...card, status });
-      } else {
-        newCards.splice(firstCardIndex, 0, { ...card, status });
-      }
-    }
-    
-    return { cards: newCards };
-  }),
-  
-  reorderCards: (activeId: string, overId: string) => set((state) => {
-    const oldIndex = state.cards.findIndex((c) => c.id === activeId);
-    const newIndex = state.cards.findIndex((c) => c.id === overId);
-    
-    if (oldIndex === -1 || newIndex === -1) return state;
-    
-    const newCards = [...state.cards];
-    const [movedCard] = newCards.splice(oldIndex, 1);
-    newCards.splice(newIndex, 0, movedCard);
-    
-    return { cards: newCards };
-  }),
+
+  addCard: (card) => {
+    const state = get();
+    if (!state.worker) return;
+    state.worker.postMessage({ type: 'ADD_CARD', card });
+  },
+
+  updateCard: (id, updates) => {
+    const state = get();
+    if (!state.worker) return;
+    state.worker.postMessage({ type: 'UPDATE_CARD', id, updates });
+  },
+
+  deleteCard: (id) => {
+    const state = get();
+    if (!state.worker) return;
+    state.worker.postMessage({ type: 'DELETE_CARD', id });
+  },
+
+  moveCard: (id, status, overId) => {
+    const state = get();
+    if (!state.worker) return;
+    state.worker.postMessage({ type: 'MOVE_CARD', id, status, overId });
+  },
+
+  reorderCards: (activeId: string, overId: string) => {
+    const state = get();
+    if (!state.worker) return;
+    state.worker.postMessage({ type: 'REORDER_CARDS', activeId, overId });
+  },
 }));
 
